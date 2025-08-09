@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SparkDance — Host</title>
+  <style>
+    html,body{height:100%;margin:0;font-family:sans-serif;background:#1b0b2a;color:#fff}
+    .container{display:grid;grid-template-columns:1fr 360px;gap:12px;height:100%;padding:12px}
+    .screen{background:linear-gradient(180deg,#3b0b5a, #08102a);border-radius:12px;padding:12px;position:relative}
+    canvas{width:100%;height:100%;background:linear-gradient(180deg,#141a2b, rgba(0,0,0,0.2));border-radius:8px}
+    .panel{background:#0f1720;padding:12px;border-radius:10px;overflow:auto;height:100%}
+    label{display:block;margin-top:8px;font-size:13px}
+    input,textarea,button,select{width:100%;padding:8px;margin-top:6px;border-radius:6px;border:1px solid #333;background:#0b1220;color:#fff}
+    .small{width:auto;display:inline-block}
+    .dance-list{display:flex;flex-direction:column;gap:6px}
+    .step-row{display:flex;gap:6px}
+    .step-row input{flex:1}
+    .controls{display:flex;gap:6px;margin-top:8px}
+    .score{position:absolute;right:18px;top:18px;background:rgba(0,0,0,0.4);padding:8px;border-radius:8px}
+    footer{font-size:12px;color:#bbb;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="screen">
+      <div style="height:calc(100% - 120px)">
+        <canvas id="stage"></canvas>
+        <div class="score" id="scoreBox">Score: 0</div>
+      </div>
+      <div style="height:110px;margin-top:8px;display:flex;gap:8px">
+        <div style="flex:1">
+          <button id="playBtn">Play</button>
+          <button id="pauseBtn">Pause</button>
+          <button id="stopBtn">Stop</button>
+        </div>
+        <div style="width:220px">
+          <label>Tempo multiplier</label>
+          <input id="tempo" type="range" min="0.5" max="2" step="0.05" value="1">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>SparkDance — Host</h3>
+      <section>
+        <h4>Pairing (manual SDP)</h4>
+        <label>Local offer (create & copy to mobile)</label>
+        <textarea id="localOffer" rows="4" placeholder="Create offer"></textarea>
+        <button id="createOffer">Create Offer</button>
+
+        <label>Remote answer (paste mobile answer here)</label>
+        <textarea id="remoteAnswer" rows="4" placeholder="Paste mobile answer"></textarea>
+        <button id="setRemoteAnswer">Set Remote Answer</button>
+        <div id="connStatus">Status: disconnected</div>
+      </section>
+
+      <hr>
+      <section>
+        <h4>Dance Creator</h4>
+        <div class="dance-list" id="steps"></div>
+        <button id="addStep">Add Step</button>
+        <div class="controls">
+          <button id="saveDance">Download JSON</button>
+          <input id="loadFile" type="file" accept="application/json">
+        </div>
+      </section>
+
+      <hr>
+      <section>
+        <h4>Playback & Scoring</h4>
+        <label>Expected axis for "move" checks</label>
+        <select id="expectedAxis">
+          <option value="beta">tilt front/back (beta)</option>
+          <option value="gamma">tilt left/right (gamma)</option>
+          <option value="alpha">rotation (alpha)</option>
+        </select>
+        <label>Accept threshold (degrees)</label>
+        <input id="threshold" type="number" value="20">
+      </section>
+
+      <footer>
+        Tips: Use manual offer/answer copy-paste to pair phone. On mobile grant motion permission. Steps have label, time (seconds), and target value.
+      </footer>
+    </div>
+  </div>
+
+<script>
+// Host: canvas rendering, dance creator, manual WebRTC answer handling, scoring
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+function fit(){canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight}
+window.addEventListener('resize', fit); fit();
+
+// Simple dance model: [{t:seconds, label, axis, value}]
+let dance = [];
+const stepsDiv = document.getElementById('steps');
+function renderSteps(){stepsDiv.innerHTML=''; dance.forEach((s,i)=>{
+  const row = document.createElement('div'); row.className='step-row';
+  row.innerHTML = `<input data-i=${i} class="label" value="${s.label}">`+
+                  `<input data-i=${i} class="time" value="${s.t}">`+
+                  `<input data-i=${i} class="value" value="${s.value}">`+
+                  `<button data-i=${i} class="del">x</button>`;
+  stepsDiv.appendChild(row);
+});
+// attach listeners
+stepsDiv.querySelectorAll('.del').forEach(b=>b.onclick=e=>{dance.splice(+e.target.dataset.i,1); renderSteps();});
+stepsDiv.querySelectorAll('.label').forEach(inp=>inp.onchange=e=>{dance[+e.target.dataset.i].label=e.target.value});
+stepsDiv.querySelectorAll('.time').forEach(inp=>inp.onchange=e=>{dance[+e.target.dataset.i].t=Number(e.target.value)});
+stepsDiv.querySelectorAll('.value').forEach(inp=>inp.onchange=e=>{dance[+e.target.dataset.i].value=Number(e.target.value)});
+}
+
+document.getElementById('addStep').onclick = ()=>{dance.push({t:Math.round((dance.length?dance[dance.length-1].t+2:2)),label:'Step',axis:'beta',value:0}); renderSteps();}
+
+document.getElementById('saveDance').onclick = ()=>{const a=document.createElement('a'); a.href='data:application/json,'+encodeURIComponent(JSON.stringify(dance,null,2)); a.download='dance.json'; a.click();}
+
+document.getElementById('loadFile').onchange = async (e)=>{const f=e.target.files[0]; if(!f) return; const txt = await f.text(); dance = JSON.parse(txt); renderSteps();}
+
+// Playback
+let startTime=null, paused=false, playReq=null, score=0;
+const scoreBox = document.getElementById('scoreBox');
+const expectedAxisSelect = document.getElementById('expectedAxis');
+const thresholdInput = document.getElementById('threshold');
+let latestMotion = {alpha:0,beta:0,gamma:0};
+
+function play(){if(!dance.length) return alert('Add steps'); startTime = performance.now(); paused=false; score=0; scoreBox.textContent='Score: 0'; playReq=requestAnimationFrame(loop)}
+function pause(){paused=true; if(playReq) cancelAnimationFrame(playReq)}
+function stop(){paused=true; startTime=null; if(playReq) cancelAnimationFrame(playReq); drawStatic();}
+
+document.getElementById('playBtn').onclick=play;
+document.getElementById('pauseBtn').onclick=pause;
+document.getElementById('stopBtn').onclick=stop;
+
+function loop(){
+  const tempo = Number(document.getElementById('tempo').value);
+  const now = (performance.now() - startTime)/1000 * tempo;
+  draw(now);
+  // evaluate steps that are near now
+  const axis = expectedAxisSelect.value;
+  const thr = Number(thresholdInput.value);
+  dance.forEach((s,idx)=>{
+    if(!s._scored && Math.abs(now - s.t) < 1.0){
+      const diff = Math.abs(latestMotion[axis] - s.value);
+      if(diff < thr){ score += Math.round((thr - diff)*10); s._scored=true; }
+    }
+  });
+  scoreBox.textContent = 'Score: '+score;
+  playReq = requestAnimationFrame(loop);
+}
+
+function drawStatic(){ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#fff'; ctx.font='28px sans-serif'; ctx.fillText('SparkDance — Idle',20,60)}
+function draw(now){ctx.clearRect(0,0,canvas.width,canvas.height);
+  // background
+  const g = ctx.createLinearGradient(0,0,0,canvas.height); g.addColorStop(0,'#2a0b4a'); g.addColorStop(1,'#08102a'); ctx.fillStyle=g; ctx.fillRect(0,0,canvas.width,canvas.height);
+  // timeline
+  ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(40,canvas.height-140,canvas.width-80,100);
+  // draw steps relative to now
+  dance.forEach(s=>{
+    const x = (canvas.width/2) + (s.t - now)*120; // seconds -> px
+    ctx.beginPath(); ctx.arc(x, canvas.height-90, 28,0,Math.PI*2);
+    ctx.fillStyle = s._scored? 'rgba(0,255,140,0.9)': 'rgba(255,120,120,0.9)'; ctx.fill();
+    ctx.fillStyle='#000'; ctx.font='14px sans-serif'; ctx.fillText(s.label, x-18, canvas.height-90+5);
+  });
+  // show current motion values
+  ctx.fillStyle='#fff'; ctx.font='16px monospace'; ctx.fillText(`Motion - α:${latestMotion.alpha.toFixed(0)} β:${latestMotion.beta.toFixed(0)} γ:${latestMotion.gamma.toFixed(0)}`, 20,40);
+}
+
+// receive motion data via DataChannel
+let pc=null, dc=null;
+async function createOffer(){pc = new RTCPeerConnection({iceServers:[{urls:['stun:stun.l.google.com:19302']} ]});
+  dc = pc.createDataChannel('motion'); setupDC();
+  pc.onicecandidate = e=>{ if(e.candidate===null){ document.getElementById('localOffer').value = JSON.stringify(pc.localDescription);} };
+  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+}
+function setupDC(){dc.onopen = ()=>{document.getElementById('connStatus').textContent='Status: connected';};
+  dc.onmessage = e=>{ try{ const m = JSON.parse(e.data); latestMotion = m;}catch(ex){} };
+}
+
+async function setRemoteAnswer(){const text = document.getElementById('remoteAnswer').value.trim(); if(!text) return; const ans = JSON.parse(text); await pc.setRemoteDescription(ans); }
+
+document.getElementById('createOffer').onclick = createOffer;
+document.getElementById('setRemoteAnswer').onclick = setRemoteAnswer;
+
+// Allow host to accept manual answers even if offer created elsewhere
+
+// draw loop while idle
+setInterval(()=>{ if(!startTime) drawStatic(); }, 500);
+
+// small helper to load example dance on first use
+if(!localStorage.getItem('sparkdance-demo')){
+  dance = [ {t:2,label:'Left Tilt',axis:'gamma',value:-30}, {t:5,label:'Right Tilt',axis:'gamma',value:30}, {t:8,label:'Lean Forward',axis:'beta',value:30} ]; renderSteps(); localStorage.setItem('sparkdance-demo','1');
+}else renderSteps();
+
+</script>
+</body>
+</html>
