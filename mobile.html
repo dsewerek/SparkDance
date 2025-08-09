@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SparkDance - Mobile</title>
+    <style>
+        body { background: #111; color: white; font-family: Arial; text-align: center; padding: 20px; }
+        button { padding: 10px 20px; font-size: 18px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>📱 SparkDance - Mobile Controller</h1>
+    <p>Move your phone to dance!</p>
+    <textarea id="offer" placeholder="Paste host's offer here" style="width:100%;height:100px;"></textarea>
+    <button id="connectBtn">Connect to Host</button>
+    <textarea id="answer" placeholder="Copy this answer back to host" style="width:100%;height:100px;"></textarea>
+
+    <script>
+        let pc = new RTCPeerConnection();
+        let channel = pc.createDataChannel("motion");
+
+        channel.onopen = () => {
+            console.log("Connected to host!");
+            window.addEventListener('devicemotion', (event) => {
+                let data = {
+                    x: event.acceleration.x,
+                    y: event.acceleration.y,
+                    z: event.acceleration.z
+                };
+                channel.send(JSON.stringify(data));
+            });
+        };
+
+        document.getElementById('connectBtn').onclick = async () => {
+            let offer = document.getElementById('offer').value;
+            await pc.setRemoteDescription({ type: 'offer', sdp: offer });
+            let answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            document.getElementById('answer').value = pc.localDescription.sdp;
+        };
+    </script>
+</body>
+</html>
