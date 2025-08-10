@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SparkDance</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(135deg, #1c005c, #2d0b86, #5b1bb6);
+        color: white;
+        overflow: hidden;
+    }
+    header {
+        padding: 20px;
+        font-size: 2em;
+        font-weight: bold;
+        text-align: left;
+        padding-left: 40px;
+        background: transparent;
+    }
+    .song-info {
+        position: absolute;
+        top: 100px;
+        left: 50px;
+    }
+    .song-info h1 {
+        font-size: 2.5em;
+        margin: 0;
+    }
+    .song-info p {
+        font-size: 1.2em;
+        margin: 5px 0;
+        color: #ccc;
+    }
+    canvas {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 50%;
+        height: 80%;
+        border: 3px solid #ff00ff;
+        border-radius: 15px;
+        box-shadow: 0 0 20px rgba(255,0,255,0.8);
+    }
+    .connection-panel {
+        position: absolute;
+        bottom: 30px;
+        left: 50px;
+        background: rgba(255,255,255,0.05);
+        padding: 15px;
+        border-radius: 10px;
+        width: 400px;
+    }
+    textarea {
+        width: 100%;
+        height: 80px;
+        margin-top: 10px;
+        background: #111;
+        border: 1px solid #555;
+        color: white;
+        padding: 10px;
+    }
+    .mobile-panel {
+        text-align: center;
+        padding-top: 50px;
+    }
+</style>
+<script>
+    function isMobile() {
+        return /Mobi|Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+    }
+
+    window.onload = function() {
+        if (isMobile()) {
+            loadMobile();
+        } else {
+            loadHost();
+        }
+    }
+
+    function loadHost() {
+        document.body.innerHTML = `
+            <header>🎵 SparkDance</header>
+            <div class="song-info">
+                <h1>Sample Song</h1>
+                <p>Artist Name</p>
+                <p>Difficulty: Medium | Effort: Moderate</p>
+            </div>
+            <canvas id="danceCanvas"></canvas>
+            <div class="connection-panel">
+                <h3>Connection</h3>
+                <textarea id="offer" placeholder="Host offer"></textarea>
+                <textarea id="answer" placeholder="Paste answer here"></textarea>
+            </div>
+        `;
+    }
+
+    function loadMobile() {
+        document.body.innerHTML = `
+            <div class="mobile-panel">
+                <h1>📱 SparkDance Mobile</h1>
+                <p>Move your device to dance!</p>
+                <div id="motionData">Waiting for movement...</div>
+            </div>
+        `;
+
+        if (window.DeviceMotionEvent) {
+            window.addEventListener('devicemotion', function(event) {
+                let x = event.accelerationIncludingGravity.x.toFixed(2);
+                let y = event.accelerationIncludingGravity.y.toFixed(2);
+                let z = event.accelerationIncludingGravity.z.toFixed(2);
+                document.getElementById('motionData').innerText = `X: ${x}, Y: ${y}, Z: ${z}`;
+            });
+        } else {
+            document.getElementById('motionData').innerText = 'Device motion not supported.';
+        }
+    }
+</script>
+</head>
+<body>
+    <p style="text-align:center;margin-top:50px;">Loading SparkDance...</p>
+</body>
+</html>
