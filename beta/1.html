@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SparkDance — Just Dance Clone</title>
+  <style>
+    :root{
+      --bg1:#2b1250; --bg2:#6b2b8f; --accent:#ff6ec7; --muted:#bfb3d6;
+      --card:#2f2040; --glass: rgba(255,255,255,0.06);
+      --glass-2: rgba(255,255,255,0.03);
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; min-height:100vh; background: radial-gradient(1200px 400px at 10% 10%, rgba(255,110,199,0.08), transparent), linear-gradient(135deg,var(--bg1),var(--bg2)); color:#fff}
+    .app{max-width:1200px;margin:24px auto;padding:20px}
+
+    .hero{display:grid;grid-template-columns:1fr 420px;gap:24px;align-items:center}
+    .title-block{padding:18px;background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); border-radius:12px;}
+    .game-title{font-size:28px;font-weight:700;letter-spacing:0.6px;margin:0}
+    .song-name{font-size:44px;font-weight:800;margin:12px 0;color:#fff;text-shadow:0 6px 24px rgba(0,0,0,0.6)}
+    .meta{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .pill{background:var(--glass);padding:8px 12px;border-radius:8px;color:var(--muted);font-weight:600}
+    .icons{display:flex;gap:14px;align-items:center}
+
+    .preview-card{height:360px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));border-radius:16px;padding:10px;position:relative;overflow:hidden;border:2px solid rgba(255,110,199,0.12)}
+    .preview-stage{position:absolute;inset:18px;border-radius:10px;background:linear-gradient(180deg, rgba(0,0,0,0.2), rgba(0,0,0,0.6));display:flex;align-items:center;justify-content:center}
+    .dancer{width:240px;filter:drop-shadow(0 20px 30px rgba(0,0,0,0.6));transition:transform .5s ease}
+    .dancer.animated{transform:translateY(-8px) rotate(-6deg)}
+
+    .section{margin-top:28px}
+    .section h3{margin:6px 0 12px;color:var(--muted)}
+    .carousel{display:flex;gap:14px;overflow-x:auto;padding:8px}
+    .track{min-width:220px;background:var(--card);border-radius:10px;padding:8px;border:1px solid rgba(255,255,255,0.04);cursor:pointer}
+    .track img{width:100%;border-radius:8px;display:block}
+    .track .track-title{margin-top:8px;font-weight:700}
+    .track .meta{margin-top:6px;color:var(--muted);font-size:13px}
+
+    .controls{display:flex;gap:8px;margin-top:12px}
+    .btn{background:var(--accent);border:none;padding:10px 14px;border-radius:10px;color:#111;font-weight:700;cursor:pointer}
+    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#fff}
+
+    .fav{position:absolute;right:8px;top:8px;background:rgba(0,0,0,0.25);padding:8px;border-radius:8px}
+
+    @media(max-width:880px){
+      .hero{grid-template-columns:1fr;}
+      .preview-card{height:260px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="hero">
+      <div class="title-block">
+        <div class="game-title">SparkDance</div>
+        <h1 class="song-name" id="songName">Sweet Melody</h1>
+        <div class="meta">
+          <div class="pill" id="artist">Little Mix • Just Dance 2025</div>
+          <div class="pill">Difficulty: Medium</div>
+          <div class="pill">Effort: Moderate</div>
+          <div class="pill">1 Coach</div>
+        </div>
+        <div class="controls">
+          <button class="btn" id="playBtn">Play</button>
+          <button class="btn secondary" id="previewBtn">Preview</button>
+          <button class="btn secondary" id="favToggle">♡ Favorite</button>
+        </div>
+      </div>
+
+      <div class="preview-card" aria-hidden="false">
+        <div class="fav" id="favBadge">Not favorite</div>
+        <div class="preview-stage" id="stage"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Just Dance 2025 Edition</h3>
+      <div class="carousel" id="carousel" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <h3>Now playing</h3>
+      <div id="nowPlaying">None</div>
+    </div>
+  </div>
+
+  <script>
+    const tracks = [
+      {
+        id:1, title:'Sweet Melody', artist:'Little Mix', edition:'Just Dance 2025',
+        thumb:'https://static.wikia.nocookie.net/justdance/images/f/fd/SweetMelody_Coach_1.png/',
+        dancer:'https://static.wikia.nocookie.net/justdance/images/f/fd/SweetMelody_Coach_1.png/'
+      },
+      {
+        id:2, title:'The Boy is Mine', artist:'Unknown', thumb:'https://static.wikia.nocookie.net/justdance/images/a/a0/BoyIsMine_Coach_1.png/', dancer:'https://static.wikia.nocookie.net/justdance/images/a/a0/BoyIsMine_Coach_1.png/'
+      },
+      {
+        id:3, title:"The Lion Sleeps Tonight", artist:'Wimoweh', thumb:'https://static.wikia.nocookie.net/justdance/images/2/2c/LionSleeps_Coach_1.png/', dancer:'https://static.wikia.nocookie.net/justdance/images/2/2c/LionSleeps_Coach_1.png'
+      },
+      {
+        id:4, title:'Training Season', artist:'Various', thumb:'https://static.wikia.nocookie.net/justdance/images/e/e2/TrainingSeason_Coach_1.png/', dancer:'https://static.wikia.nocookie.net/justdance/images/e/e2/TrainingSeason_Coach_1.png/'
+      },
+      {
+        id:5, title:'Unstoppable', artist:'Unknown', thumb:'https://static.wikia.nocookie.net/justdance/images/4/45/UnstoppableALT_Coach_1.png/', dancer:'https://static.wikia.nocookie.net/justdance/images/4/45/UnstoppableALT_Coach_1.png/'
+      }
+    ];
+
+    const carousel = document.getElementById('carousel');
+    const songName = document.getElementById('songName');
+    const artist = document.getElementById('artist');
+    const stage = document.getElementById('stage');
+    const nowPlaying = document.getElementById('nowPlaying');
+    const favToggle = document.getElementById('favToggle');
+    const favBadge = document.getElementById('favBadge');
+
+    function renderCarousel(){
+      carousel.innerHTML='';
+      tracks.forEach(t=>{
+        const el = document.createElement('div'); el.className='track'; el.dataset.id=t.id;
+        el.innerHTML = `\n          <img src="${t.thumb}" alt="${t.title} thumbnail">\n          <div class=\"track-title\">${t.title}</div>\n          <div class=\"meta\">${t.artist}</div>\n        `;
+        el.addEventListener('click', ()=>selectTrack(t.id));
+        carousel.appendChild(el);
+      });
+    }
+
+    let current = tracks[0];
+
+    function selectTrack(id){
+      current = tracks.find(x=>x.id===id);
+      songName.textContent = current.title;
+      artist.textContent = `${current.artist} • ${current.edition || ''}`;
+      loadDancer(current.dancer);
+      highlightSelected();
+    }
+
+    function highlightSelected(){
+      document.querySelectorAll('.track').forEach(el=>{
+        el.style.outline = el.dataset.id==current.id ? '2px solid rgba(255,110,199,0.3)' : 'none';
+      });
+    }
+
+    function loadDancer(url){
+      stage.innerHTML = '';
+      const img = document.createElement('img'); img.className='dancer'; img.alt='dancer preview'; img.src = url;
+      stage.appendChild(img);
+    }
+
+    document.getElementById('playBtn').addEventListener('click', ()=>{
+      nowPlaying.textContent = `${current.title} — ${current.artist}`;
+      const dancer = stage.querySelector('.dancer');
+      if(!dancer) return;
+      dancer.classList.add('animated');
+      setTimeout(()=>dancer.classList.remove('animated'), 800);
+    });
+
+    document.getElementById('previewBtn').addEventListener('click', ()=>{
+      const dancer = stage.querySelector('.dancer'); if(!dancer) return;
+      dancer.classList.toggle('animated'); setTimeout(()=>dancer.classList.remove('animated'),600);
+    });
+
+    favToggle.addEventListener('click', ()=>{
+      const isFav = favToggle.textContent.includes('♡')===false;
+      if(isFav){ favToggle.textContent='♡ Favorite'; favBadge.textContent='Not favorite'; }
+      else{ favToggle.textContent='♥ Favorited'; favBadge.textContent='Favorited'; }
+    });
+
+    carousel.addEventListener('keydown', (e)=>{
+      const visible = Array.from(carousel.querySelectorAll('.track'));
+      const idx = visible.findIndex(x=>x.dataset.id==current.id);
+      if(e.key==='ArrowRight'){ const next = visible[idx+1]||visible[0]; next.click(); next.scrollIntoView({behavior:'smooth',inline:'center'}); }
+      if(e.key==='ArrowLeft'){ const prev = visible[idx-1]||visible[visible.length-1]; prev.click(); prev.scrollIntoView({behavior:'smooth',inline:'center'}); }
+    });
+
+    renderCarousel(); selectTrack(current.id);
+  </script>
+  Thanks to Just Dance wiki for coach photos!
+</body>
+</html>
